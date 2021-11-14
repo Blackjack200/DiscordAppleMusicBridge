@@ -53,7 +53,7 @@ func update() bool {
 		LargeText:  fetch.Artist,
 		Buttons: []*client.Button{
 			{
-				Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", fetch.SampleRate/1000, fetch.BitRate),
+				Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
 				Url:   "https://music.apple.com",
 			}, {
 				Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),

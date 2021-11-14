@@ -23,6 +23,7 @@ func init() {
 
 type Track struct {
 	Name        string  `json:"name"`
+	Kind        string  `json:"kind"`
 	Album       string  `json:"album"`
 	Artist      string  `json:"artist"`
 	BitRate     int     `json:"bitRate"`
