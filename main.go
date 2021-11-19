@@ -27,6 +27,7 @@ func reconnect() bool {
 			return true
 		}
 		time.Sleep(time.Second)
+		logrus.Error(fmt.Errorf("failed to connect to discord client(retry %v): %v", i, err))
 	}
 	if err != nil {
 		logrus.Fatal(fmt.Errorf("failed to connect to discord client: %v", err))
