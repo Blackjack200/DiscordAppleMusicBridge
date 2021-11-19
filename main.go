@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/Blackjack200/DiscordAppleMusicBridge/applemusic"
-	"github.com/hugolgst/rich-go/client"
+	"github.com/blackjack200/rich-go-plus/client"
+	"github.com/blackjack200/rich-go-plus/codec"
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
@@ -11,11 +12,31 @@ import (
 	"time"
 )
 
+var conn *client.Client
+
+func reconnect() bool {
+	var err error
+	i := 16
+	for i > 0 {
+		i--
+		c, e := client.Dial("909326302757126186")
+		if e != nil {
+			err = e
+		} else {
+			conn = c
+			return true
+		}
+		time.Sleep(time.Second)
+	}
+	if err != nil {
+		logrus.Fatal(fmt.Errorf("failed to connect to discord client: %v", err))
+	}
+	return false
+}
+
 func main() {
 	log := logrus.New()
-	if err := client.Login("909326302757126186"); err != nil {
-		log.Fatal(fmt.Errorf("failed to connect to discord client: %v", err))
-	}
+	reconnect()
 	log.Info("Discord <=> Apple Music Started!!!")
 	ticker := time.NewTicker(time.Second * 2)
 	sigs := make(chan os.Signal)
@@ -23,7 +44,7 @@ func main() {
 	go func() {
 		<-sigs
 		ticker.Stop()
-		client.Logout()
+		conn.Close()
 		log.Info("Discord <=> Apple Music Shutdown!!!")
 		os.Exit(0)
 	}()
@@ -32,6 +53,9 @@ func main() {
 		case <-ticker.C:
 			if !update() {
 				log.Error("failed to update")
+				if reconnect() {
+					log.Info("Recovered")
+				}
 			}
 		}
 	}
@@ -40,25 +64,31 @@ func main() {
 func update() bool {
 	fetch, err := applemusic.Fetch()
 	if err != nil {
-		return client.SetActivity(client.Activity{
+		_ = conn.SetActivity(&codec.Activity{
 			Details:    "Idle",
 			LargeImage: "apple_music_icon",
 			LargeText:  "Apple Music",
-		}) == nil
-	}
-	return client.SetActivity(client.Activity{
-		Details:    fetch.Name,
-		State:      fetch.Album,
-		LargeImage: "apple_music_icon",
-		LargeText:  fetch.Artist,
-		Buttons: []*client.Button{
-			{
-				Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
-				Url:   "https://music.apple.com",
-			}, {
-				Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),
-				Url:   "https://music.apple.com",
+		})
+	} else {
+		_ = conn.SetActivity(&codec.Activity{
+			Details:    fetch.Name,
+			State:      fetch.Album,
+			LargeImage: "apple_music_icon",
+			LargeText:  fetch.Artist,
+			Buttons: []*codec.Button{
+				{
+					Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
+					Url:   "https://music.apple.com",
+				}, {
+					Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),
+					Url:   "https://music.apple.com",
+				},
 			},
-		},
-	}) == nil
+		})
+	}
+	msg, suc := conn.Read()
+	if suc {
+		return msg.Success()
+	}
+	return false
 }
