@@ -22,17 +22,19 @@ func init() {
 }
 
 type Track struct {
-	Name        string  `json:"name"`
-	Kind        string  `json:"kind"`
-	Album       string  `json:"album"`
-	Artist      string  `json:"artist"`
-	BitRate     int     `json:"bitRate"`
-	DiscCount   int     `json:"discCount"`
-	DiscNumber  int     `json:"discNumber"`
-	Duration    float64 `json:"duration"`
-	SampleRate  int     `json:"sampleRate"`
-	TrackCount  int     `json:"trackCount"`
-	TrackNumber int     `json:"trackNumber"`
+	Name           string  `json:"name"`
+	Kind           string  `json:"kind"`
+	Album          string  `json:"album"`
+	Artist         string  `json:"artist"`
+	BitRate        int     `json:"bitRate"`
+	DiscCount      int     `json:"discCount"`
+	DiscNumber     int     `json:"discNumber"`
+	Duration       float64 `json:"duration"`
+	SampleRate     int     `json:"sampleRate"`
+	TrackCount     int     `json:"trackCount"`
+	TrackNumber    int     `json:"trackNumber"`
+	PlayerState    string  `json:"playerState"`
+	PlayerPosition float64 `json:"playerPosition"`
 }
 
 func Fetch() (*Track, error) {

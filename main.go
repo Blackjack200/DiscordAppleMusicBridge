@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -52,8 +53,8 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			if !update() {
-				log.Error("failed to update")
+			if err := update(); err != nil {
+				log.Errorf("failed to update: %v", err)
 				if reconnect() {
 					log.Info("Recovered")
 				}
@@ -62,34 +63,28 @@ func main() {
 	}
 }
 
-func update() bool {
+func update() error {
 	fetch, err := applemusic.Fetch()
 	if err != nil {
-		_ = conn.SetActivity(&codec.Activity{
+		return conn.SetActivity(&codec.Activity{
 			Details:    "Idle",
 			LargeImage: "apple_music_icon",
 			LargeText:  "Apple Music",
 		})
-	} else {
-		_ = conn.SetActivity(&codec.Activity{
-			Details:    fetch.Name,
-			State:      fetch.Album,
-			LargeImage: "apple_music_icon",
-			LargeText:  fetch.Artist,
-			Buttons: []*codec.Button{
-				{
-					Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
-					Url:   "https://music.apple.com",
-				}, {
-					Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),
-					Url:   "https://music.apple.com",
-				},
+	}
+	return conn.SetActivity(&codec.Activity{
+		Details:    fmt.Sprintf("[%v] %v", strings.ToUpper(fetch.PlayerState), fetch.Name),
+		State:      fetch.Album,
+		LargeImage: "apple_music_icon",
+		LargeText:  fetch.Artist,
+		Buttons: []*codec.Button{
+			{
+				Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
+				Url:   "https://music.apple.com",
+			}, {
+				Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),
+				Url:   "https://music.apple.com",
 			},
-		})
-	}
-	msg, suc := conn.Read()
-	if suc {
-		return msg.Success()
-	}
-	return false
+		},
+	})
 }

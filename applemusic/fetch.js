@@ -1,11 +1,7 @@
-const APP = Application.currentApplication();
-APP.includeStandardAdditions = true;
-ObjC.import('Foundation');
-
-const iTunesApp = Application('Music');
+var music = Application('Music');
 
 function run(argv) {
-    let track = iTunesApp.currentTrack;
+    let track = music.currentTrack;
     let data = {
         "name": track.name(),
         "kind": track.kind(),
@@ -18,6 +14,8 @@ function run(argv) {
         "sampleRate": track.sampleRate(),
         "trackCount": track.trackCount(),
         "trackNumber": track.trackNumber(),
+        "playerState": music.playerState(),
+        "playerPosition": music.playerPosition(),
     };
     return JSON.stringify(data);
 }
