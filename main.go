@@ -5,62 +5,69 @@ import (
 	"github.com/Blackjack200/DiscordAppleMusicBridge/applemusic"
 	"github.com/blackjack200/rich-go-plus/client"
 	"github.com/blackjack200/rich-go-plus/codec"
-	"github.com/sirupsen/logrus"
+	"github.com/progrium/macdriver/cocoa"
+	"github.com/progrium/macdriver/objc"
 	"os"
-	"os/signal"
+	"runtime"
 	"strings"
-	"syscall"
 	"time"
 )
 
 var conn *client.Client
 
 func reconnect() bool {
-	var err error
 	i := 16
 	for i > 0 {
 		i--
 		c, e := client.Dial("909326302757126186")
-		if e != nil {
-			err = e
-		} else {
+		if e == nil {
 			conn = c
 			return true
 		}
 		time.Sleep(time.Second)
-		logrus.Error(fmt.Errorf("failed to connect to discord client(retry %v): %v", i, err))
-	}
-	if err != nil {
-		logrus.Fatal(fmt.Errorf("failed to connect to discord client: %v", err))
 	}
 	return false
 }
 
 func main() {
-	log := logrus.New()
-	reconnect()
-	log.Info("Discord <=> Apple Music Started!!!")
+	runtime.LockOSThread()
+	app := cocoa.NSApp_WithDidLaunch(func(n objc.Object) {
+		setup()
+	})
+	app.Run()
+}
+
+func setup() {
+	obj := cocoa.NSStatusBar_System().StatusItemWithLength(cocoa.NSVariableStatusItemLength)
+	obj.Retain()
+	obj.Button().SetTitle("🎵 Discord")
+
 	ticker := time.NewTicker(time.Second * 2)
-	sigs := make(chan os.Signal)
-	signal.Notify(sigs, os.Interrupt, os.Kill, syscall.SIGTERM)
 	go func() {
-		<-sigs
-		ticker.Stop()
-		conn.Close()
-		log.Info("Discord <=> Apple Music Shutdown!!!")
-		os.Exit(0)
-	}()
-	for {
-		select {
-		case <-ticker.C:
-			if err := update(); err != nil {
-				log.Errorf("failed to update: %v", err)
-				if reconnect() {
-					log.Info("Recovered")
+		reconnect()
+		for {
+			select {
+			case <-ticker.C:
+				if err := update(); err != nil {
 				}
 			}
 		}
-	}
+	}()
+
+	itemQuit := cocoa.NSMenuItem_New()
+	itemQuit.SetTitle("Quit")
+	itemQuit.SetAction(objc.Sel("quit:"))
+	cocoa.DefaultDelegateClass.AddMethod("quit:", func(_ objc.Object) {
+		if conn != nil {
+			conn.Close()
+		}
+		ticker.Stop()
+		os.Exit(0)
+	})
+
+	menu := cocoa.NSMenu_New()
+	menu.AddItem(itemQuit)
+	obj.SetMenu(menu)
 }
 
 func update() error {
