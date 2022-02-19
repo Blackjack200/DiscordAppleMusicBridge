@@ -9,3 +9,5 @@ Current Supported Platform: MacOS
 
 <img src="screenshot.png" alt="img">
 
+<img src="screenshot_2.png" alt="img">
+

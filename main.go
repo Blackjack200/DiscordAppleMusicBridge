@@ -1,36 +1,41 @@
 package main
 
 import (
-	"fmt"
-	"github.com/Blackjack200/DiscordAppleMusicBridge/applemusic"
-	"github.com/blackjack200/rich-go-plus/client"
-	"github.com/blackjack200/rich-go-plus/codec"
-	"github.com/progrium/macdriver/cocoa"
-	"github.com/progrium/macdriver/objc"
+	"github.com/Blackjack200/DiscordAppleMusicBridge/producer/applemusic"
+	"github.com/progrium/macdriver/core"
 	"os"
 	"runtime"
-	"strings"
 	"time"
+
+	"github.com/Blackjack200/DiscordAppleMusicBridge/producer"
+	"github.com/Blackjack200/DiscordAppleMusicBridge/producer/vlc"
+	"github.com/blackjack200/rich-go-plus/client"
+	"github.com/progrium/macdriver/cocoa"
+	"github.com/progrium/macdriver/objc"
 )
 
 var conn *client.Client
+var prod producer.Producer
+var changed bool
 
 func reconnect() bool {
 	i := 16
 	for i > 0 {
 		i--
-		c, e := client.Dial("909326302757126186")
-		if e == nil {
+		c, _ := client.Dial(prod.AppId())
+		if c != nil {
 			conn = c
 			return true
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second / 4)
 	}
 	return false
 }
 
 func main() {
 	runtime.LockOSThread()
+
+	cocoa.TerminateAfterWindowsClose = false
 	app := cocoa.NSApp_WithDidLaunch(func(n objc.Object) {
 		setup()
 	})
@@ -40,23 +45,33 @@ func main() {
 func setup() {
 	obj := cocoa.NSStatusBar_System().StatusItemWithLength(cocoa.NSVariableStatusItemLength)
 	obj.Retain()
-	obj.Button().SetTitle("🎵 Discord")
+	obj.Button().SetTitle("Discord")
 
 	ticker := time.NewTicker(time.Second * 2)
+	prod = vlc.NewProducer()
 	go func() {
 		reconnect()
 		for {
+			if changed {
+				if conn != nil {
+					conn.Close()
+				}
+				reconnect()
+				changed = false
+			}
 			select {
 			case <-ticker.C:
-				if err := update(); err != nil {
+				if err := conn.SetActivity(prod.Activity()); err != nil {
+					reconnect()
 				}
 			}
 		}
 	}()
 
+	itemAppleMusic := cocoa.NSMenuItem_New()
+	itemVLC := cocoa.NSMenuItem_New()
 	itemQuit := cocoa.NSMenuItem_New()
 	itemQuit.SetTitle("Quit")
-	itemQuit.SetAction(objc.Sel("quit:"))
 	cocoa.DefaultDelegateClass.AddMethod("quit:", func(_ objc.Object) {
 		if conn != nil {
 			conn.Close()
@@ -64,34 +79,53 @@ func setup() {
 		ticker.Stop()
 		os.Exit(0)
 	})
+	itemQuit.SetAction(objc.Sel("quit:"))
 
-	menu := cocoa.NSMenu_New()
-	menu.AddItem(itemQuit)
-	obj.SetMenu(menu)
-}
-
-func update() error {
-	fetch, err := applemusic.Fetch()
-	if err != nil {
-		return conn.SetActivity(&codec.Activity{
-			Details:    "Idle",
-			LargeImage: "apple_music_icon",
-			LargeText:  "Apple Music",
+	itemAppleMusic.SetTitle("Apple Music")
+	selectAppleMusicFunc := func(_ objc.Object) {
+		selectAppleMusic()
+		core.Dispatch(func() {
+			itemVLC.SetEnabled(true)
+			itemAppleMusic.SetEnabled(false)
+			itemVLC.SetTitle("VLC")
+			itemAppleMusic.SetTitle("Apple Music (selected)")
 		})
 	}
-	return conn.SetActivity(&codec.Activity{
-		Details:    fmt.Sprintf("[%v] %v", strings.ToUpper(fetch.PlayerState), fetch.Name),
-		State:      fetch.Album,
-		LargeImage: "apple_music_icon",
-		LargeText:  fetch.Artist,
-		Buttons: []*codec.Button{
-			{
-				Label: fmt.Sprintf("Quailty: %vkhz/%vkbps", float32(fetch.SampleRate)/1000, fetch.BitRate),
-				Url:   "https://music.apple.com",
-			}, {
-				Label: fmt.Sprintf("Disc: %v/%v Track: %v/%v", fetch.DiscNumber, fetch.DiscCount, fetch.TrackNumber, fetch.TrackCount),
-				Url:   "https://music.apple.com",
-			},
-		},
+	cocoa.DefaultDelegateClass.AddMethod("a:", selectAppleMusicFunc)
+	itemAppleMusic.SetAction(objc.Sel("a:"))
+
+	itemVLC.SetTitle("VLC")
+	cocoa.DefaultDelegateClass.AddMethod("vlc:", func(_ objc.Object) {
+		selectVLC()
+		core.Dispatch(func() {
+			itemVLC.SetEnabled(false)
+			itemAppleMusic.SetEnabled(true)
+			itemVLC.SetTitle("VLC (selected)")
+			itemAppleMusic.SetTitle("Apple Music")
+		})
 	})
+	itemVLC.SetAction(objc.Sel("vlc:"))
+
+	menu := cocoa.NSMenu_New()
+	menu.AddItem(itemAppleMusic)
+	menu.AddItem(itemVLC)
+	menu.AddItem(itemQuit)
+
+	obj.SetMenu(menu)
+	selectAppleMusicFunc(nil)
+}
+
+func change(p producer.Producer) {
+	if p != prod {
+		prod = p
+		changed = true
+	}
+}
+
+func selectAppleMusic() {
+	change(applemusic.NewProducer())
+}
+
+func selectVLC() {
+	change(vlc.NewProducer())
 }
